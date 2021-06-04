@@ -1,0 +1,93 @@
+service: my-demo-service-15
+
+frameworkVersion: '2'
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  lambdaHashingVersion: 20201221
+  stage: dev
+  region: af-south-1
+  environment:
+    DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
+    S3_BUCKET: ${self:service}-${opt:stage, self:provider.stage}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource:
+        - arn:aws:logs:*:*:* # allow replicated lambdas to create logs
+    - Effect: Allow
+      Action:
+        - s3:PutObject
+        - s3:GetObject
+        - s3:ListBucket
+        - s3:ListBucketVersions
+      Resource:
+        - 'arn:aws:s3:::${self:provider.environment.S3_BUCKET}'
+        - 'arn:aws:s3:::${self:provider.environment.S3_BUCKET}/*'
+
+functions:
+  createSignedS3PutUrl:
+    handler: app_files/create.createSignedS3PutUrl
+    events:
+      - httpApi:
+          path: /api/signed_s3_put_url
+          method: post
+  list:
+    handler: app_files/list.list
+    events:
+      - httpApi:
+          path: /api/app_files
+          method: post
+  get:
+    handler: app_files/get.get
+    events:
+      - httpApi:
+          path: /api/app_file/{filename}
+          method: get
+  notify:
+    handler: app_files/create.objectCreated
+    events:
+      - s3:
+          bucket: ${self:provider.environment.S3_BUCKET}
+          events: s3:ObjectCreated:*
+          existing: false
+
+custom:
+  stage: ${opt:stage, self:provider.stage}
+  config: ${file(./config.json)} # config json has shared parameters -> Lambda@Edge doesn't support Lambda environmental variables
+  
+resources:
+  Resources:
+        
+    DynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: FileName
+            AttributeType: S
+        KeySchema:
+          -
+            AttributeName: FileName
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
+        
+plugins:
+  - serverless-offline

@@ -5,11 +5,27 @@ const AWS = require('aws-sdk'); // eslint-disable-line import/no-extraneous-depe
 const dynamoDb = new AWS.DynamoDB.DocumentClient();
 
 module.exports.get = (event, context, callback) => {
+  let fileName = '';
+  try {
+    fileName = event.pathParameters.filename;
+  } catch (e) {
+    //console.error(e);
+  }
+  if (fileName=='') {
+    console.error('Invalid FileName');
+    callback(null, {
+      statusCode: 400,
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'Invalid FileName',
+    });
+    return;
+  }
+  
   const params = {
     TableName: process.env.DYNAMODB_TABLE,
     //TableName: 'test2',
     Key: {
-      FileName: event.pathParameters.filename,
+      FileName: fileName,
     },
   };
 
